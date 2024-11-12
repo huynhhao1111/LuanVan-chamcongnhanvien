@@ -19,7 +19,41 @@ import sqlite3
 from tempfile import NamedTemporaryFile
 import shutil
 
+def is_valid_id(Id):
+    return Id.isdigit() and len(Id) == 5
 
+# Hàm kiểm tra tên chỉ chứa chữ cái
+def is_valid_name(name):
+    return name.isalpha()
+
+# Hàm kiểm tra dữ liệu
+def validate_data(Id, name):
+    errors = []  # Danh sách chứa các lỗi
+
+    # Kiểm tra ID
+    if not is_valid_id(Id):
+        errors.append("ID phải là 5 chữ số.")
+
+    conn = sqlite3.connect("FaceBaseNew.db")
+    cursor = conn.execute('SELECT * FROM People WHERE ID=' + str(Id))
+    isRecordExist = 0
+    for row in cursor:
+        isRecordExist = 1
+        break
+
+        # Cập nhật hoặc chèn bản ghi
+    if isRecordExist == 1:
+        errors.append(f"ID {Id} đã tồn tại. Vui lòng nhập ID khác.")
+
+    # Kiểm tra tên
+    if not is_valid_name(name):
+        errors.append("Tên chỉ chứa chữ cái.")
+
+    # Trả về danh sách lỗi nếu có, ngược lại trả về None
+    if errors:
+        return errors
+    else:
+        return None
 def is_number(s):
     try:
         float(s)
@@ -44,7 +78,7 @@ fontcolor = (0, 255, 0)
 fontcolor1 = (0, 0, 255)
 
 
-def insertOrUpdate(id, name, age, gender, cr):
+def insertOrUpdate(id, name, age, gender, cr, pb):
     conn = sqlite3.connect("FaceBaseNew.db")
     cursor = conn.execute('SELECT * FROM People WHERE ID=' + str(id))
     isRecordExist = 0
@@ -52,26 +86,27 @@ def insertOrUpdate(id, name, age, gender, cr):
         isRecordExist = 1
         break
 
+    # Cập nhật hoặc chèn bản ghi
     if isRecordExist == 1:
-        cmd = "UPDATE people SET Name=' " + str(name) + " ',Age=' " + str(age) + " ',Gender=' " + str(
-            gender) + " ',CR=' " + str(cr) + " ' WHERE ID=" + str(id)
+        cmd = f"UPDATE People SET Name='{str(name)}', Age='{str(age)}', Gender='{str(gender)}', CR='{str(cr)}', phong_ban='{str(pb)}' WHERE ID={str(id)}"
     else:
-        cmd = "INSERT INTO people(ID,Name,Age,Gender,CR) Values(" + str(id) + ",' " + str(name) + " ',' " + str(
-            age) + " ',' " + str(gender) + " ',' " + str(cr) + " ' )"
+        cmd = f"INSERT INTO People(ID, Name, Age, Gender, CR, phong_ban) VALUES({str(id)}, '{str(name)}', '{str(age)}', '{str(gender)}', '{str(cr)}', '{str(pb)}')"
+
+    # Thực thi câu lệnh SQL
     conn.execute(cmd)
     conn.commit()
     conn.close()
 
 
-import cv2
-import os
-import shutil
-import time
-from tkinter import messagebox as msgbox
-
-def TakeImages(Id, name, age, gender, cr):
-    if is_number(Id) and name.isalpha():
-        insertOrUpdate(Id, name, age, gender, cr)
+def TakeImages(Id, name, age, gender, cr, pb):
+    validation_errors = validate_data(Id, name)
+    if validation_errors:
+        # Nếu có lỗi, hiển thị từng lỗi trong danh sách lỗi
+        for error in validation_errors:
+            msgbox.showerror("Lỗi", error)
+        return False  # Trả về False nếu có lỗi
+    if not validation_errors:
+        insertOrUpdate(Id, name, age, gender, cr, pb)
         cam = cv2.VideoCapture(0)
         cam.set(3, 1920)
         cam.set(4, 1080)
@@ -193,104 +228,7 @@ def TrainImages(training_dir, person_name):
 
     print("[INFO] Đã hoàn thành huấn luyện và lưu mã hóa.")
 
-# def TakeImages(Id, name, age, gender, cr):
-#     if (is_number(Id) and name.isalpha()):
-#         insertOrUpdate(Id, name, age, gender, cr)
-#         cam = cv2.VideoCapture(0)
-#         cam.set(3, 1920)
-#         cam.set(4, 1080)
-#
-#         sampleNum = 0
-#
-#         # Tạo thư mục theo tên của người dùng và ID
-#         folder_name = f"TrainingImage/{name}_{Id}"
-#         if os.path.exists(folder_name):
-#             shutil.rmtree(folder_name)  # Xóa toàn bộ ảnh cũ
-#         os.makedirs(folder_name)  # Tạo lại thư mục mới
-#
-#         while True:
-#             ret, frame = cam.read()
-#             if not ret:
-#                 print("Không thể truy cập webcam!")
-#                 break
-#
-#             sampleNum += 1
-#
-#             # Lưu ảnh vào thư mục
-#             image_path = os.path.join(folder_name, f"{name}_{Id}_{sampleNum}.jpg")
-#             cv2.imwrite(image_path, frame)
-#
-#             # Hiển thị số lượng ảnh đã lưu
-#             cv2.putText(frame, f'Sample: {sampleNum}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1,
-#                         (255, 0, 0), 2)
-#             cv2.imshow('frame', frame)
-#
-#             # Điều kiện thoát
-#             if cv2.waitKey(1) & 0xFF == ord('q'):
-#                 break
-#             if sampleNum >= 100:  # Giới hạn số lượng mẫu
-#                 print("Đã chụp đủ 100 ảnh.")
-#                 break
-#
-#         cam.release()
-#         cv2.destroyAllWindows()
-#
-#         # Thông báo cho người dùng
-#         user_choice = msgbox.askquestion("Thông báo", "Bạn đã lấy đủ ảnh. Tiến hành lấy dữ liệu khuôn mặt? Chọn 'Lấy dữ liệu' hoặc 'Lấy lại hình ảnh'.")
-#
-#         if user_choice == 'yes':
-#             # Gọi hàm TrainImage chỉ để thêm dữ liệu cho người vừa lấy
-#             TrainImages(folder_name)
-#             msgbox.showinfo("Thông báo", f"Dữ liệu khuôn mặt của bạn đã được mã hóa và lưu vào file encodings.pickle với ID: {Id}, Name: {name}")
-#         else:
-#             # Nếu người dùng chọn lấy lại hình ảnh, mở lại webcam
-#             print("Mở lại webcam để lấy lại hình ảnh...")
-#             TakeImages(Id, name, age, gender, cr)  # Gọi lại hàm để lấy lại hình ảnh
-#     else:
-#         if not is_number(Id):
-#             res = "Nhập ID là số"
-#             msgbox.showerror('Error', res)
-#         if not name.isalpha():
-#             res = "Nhập tên theo thứ tự bảng chữ cái"
-#             msgbox.showerror('Error', res)
-#
-# def TrainImages(training_dir):
-#     print("[INFO] bắt đầu huấn luyện...")
-#
-#     encodings = []
-#     names = []
-#
-#     # Duyệt qua tất cả các thư mục con trong thư mục training_dir
-#     for person_name in os.listdir(training_dir):
-#         person_path = os.path.join(training_dir, person_name)
-#
-#         # Kiểm tra xem đó có phải là thư mục không
-#         if os.path.isdir(person_path):
-#             # Duyệt qua từng file ảnh trong thư mục của nhân viên
-#             for image_name in os.listdir(person_path):
-#                 image_path = os.path.join(person_path, image_name)
-#
-#                 # Đọc ảnh
-#                 image = cv2.imread(image_path)
-#                 rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-#
-#                 # Nhận diện khuôn mặt và mã hóa
-#                 boxes = face_recognition.face_locations(rgb_image, model="hog")
-#                 encodings_face = face_recognition.face_encodings(rgb_image, boxes)
-#
-#                 # Lưu mã hóa và tên vào danh sách
-#                 for encoding in encodings_face:
-#                     encodings.append(encoding)
-#                     names.append(person_name)
-#
-#     # Lưu dữ liệu mã hóa vào file encodings.pickle
-#     if not os.path.exists("encodings"):
-#         os.makedirs("encodings")
-#     data = {"encodings": encodings, "names": names}
-#     with open("encodings/encodings.pickle", "wb") as f:
-#         f.write(pickle.dumps(data))
-#
-#     print("[INFO] đã hoàn thành huấn luyện và lưu mã hóa.")
+
 def TrainAllImages(training_dir):
     print("[INFO] bắt đầu huấn luyện...")
 
@@ -329,109 +267,16 @@ def TrainAllImages(training_dir):
 
     print("[INFO] đã hoàn thành huấn luyện và lưu mã hóa.")
 
-# def TakeImages(Id, name, age, gender, cr):
-#     if (is_number(Id) and name.isalpha()):
-#         insertOrUpdate(Id, name, age, gender, cr)
-#         cam = cv2.VideoCapture(0)
-#         cam.set(3, 1920)
-#         cam.set(4, 1080)
-#         # # load model haarcascade
-#         # harcascadePath = "haarcascade_frontalface_default.xml"
-#         # detector = cv2.CascadeClassifier(harcascadePath)
-#
-#         sampleNum = 0
-#
-#         # Tạo thư mục theo tên của người dùng và ID
-#         folder_name = f"TrainingImage/{name}_{Id}"
-#         if os.path.exists(folder_name):
-#             shutil.rmtree(folder_name)  # Xóa toàn bộ ảnh cũ
-#         os.makedirs(folder_name)  # Tạo lại thư mục mới
-#
-#         while True:
-#             # ret, img = cam.read()
-#             # # chuyển về ảnh xám
-#             # gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-#             # # nhận diện khuôn mặt
-#             # faces = detector.detectMultiScale(gray, 1.3, 5)
-#             # for (x, y, w, h) in faces:
-#             #     # vẽ 1 đường bao quanh khuôn mặt
-#             #     cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
-#             #     # số mẫu tăng dần
-#             #     sampleNum += 1
-#             #     # lưu khuôn mặt đã chụp vào thư mục theo tên
-#             #     cv2.imwrite(f"{folder_name}/{name}_{Id}_{sampleNum}.jpg", gray[y:y + h, x:x + w])
-#             #     cv2.putText(img, str(sampleNum), (x, y + h + 30), fontface, fontscale, fontcolor, 2)
-#             #     # hiển thị khung
-#             #     cv2.imshow('frame', img)
-#             #
-#             # # đợi trong 100 mili giây
-#             # if cv2.waitKey(100) & 0xFF == ord('q'):
-#             #     break
-#             # # phá vỡ nếu số lượng mẫu nhiều hơn 100
-#             # elif sampleNum > 100:
-#             #     break
-#             # Đọc ảnh từ webcam
-#             ret, frame = cam.read()
-#             if not ret:
-#                 print("Không thể truy cập webcam!")
-#                 break
-#
-#             # Chuyển đổi ảnh từ BGR sang RGB cho face_recognition
-#             # rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-#
-#             # Tìm khuôn mặt trong ảnh
-#             # face_locations = face_recognition.face_locations(rgb_frame)
-#
-#             # Nếu phát hiện ít nhất một khuôn mặt
-#             # if len(face_locations) > 0:
-#                 # # Cắt khuôn mặt đầu tiên được phát hiện
-#                 # top, right, bottom, left = face_locations[0]
-#                 # face_image = frame[top:bottom, left:right]
-#                 #
-#                 # # Lưu ảnh khuôn mặt vào thư mục
-#                 # image_path = os.path.join(folder_name, f"{name}_{Id}_{sampleNum}.jpg")
-#                 # cv2.imwrite(image_path, face_image)
-#                 # sampleNum += 1
-#                 #
-#                 # # Hiển thị số lượng ảnh đã lưu
-#                 # print(f"Đã lưu ảnh {sampleNum}: {image_path}")
-#                 # for (top, right, bottom, left) in face_locations:
-#                 #     cv2.rectangle(frame, (left, top), (right, bottom), (255, 0, 0), 2)
-#             sampleNum += 1
-#
-#                     # Lưu ảnh khuôn mặt vào thư mục
-#                     # gray_face = cv2.cvtColor(frame[top:bottom, left:right], cv2.COLOR_BGR2GRAY)
-#
-#             image_path = os.path.join(folder_name, f"{name}_{Id}_{sampleNum}.jpg")
-#             cv2.imwrite(image_path, frame)
-#
-#                     # Hiển thị số lượng ảnh đã lưu
-#             cv2.putText(frame, f'Sample: {sampleNum}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1,
-#                             (255, 0, 0), 2)
-#             # Hiển thị khung hình
-#             cv2.imshow('frame', frame)
-#             # Điều kiện thoát
-#             if cv2.waitKey(1) & 0xFF == ord('q'):
-#                     break
-#             # Điều kiện thoát
-#             if sampleNum >= 100:  # Giới hạn số lượng mẫu
-#                 print("Đã chụp đủ 100 ảnh.")
-#                 break
-#
-#         cam.release()
-#         cv2.destroyAllWindows()
-#
-#         msgbox.showinfo("Thông báo", f"Ảnh của bạn đã được lưu với ID: {Id}, Name: {name}")
-#     else:
-#         if not is_number(Id):
-#             res = "Nhập ID là số"
-#             msgbox.showerror('Error', res)
-#         if not name.isalpha():
-#             res = "Nhập tên theo thứ tự bảng chữ cái"
-#             msgbox.showerror('Error', res)
-def extract_images_from_video(Id, name, age, gender, cr):
-    if is_number(Id) and name.isalpha():
-        insertOrUpdate(Id, name, age, gender, cr)
+
+def extract_images_from_video(Id, name, age, gender, cr, pb):
+    validation_errors = validate_data(Id, name)
+    if validation_errors:
+        # Nếu có lỗi, hiển thị từng lỗi trong danh sách lỗi
+        for error in validation_errors:
+            msgbox.showerror("Lỗi", error)
+        return False  # Trả về False nếu có lỗi
+    if not validation_errors:
+        insertOrUpdate(Id, name, age, gender, cr, pb)
         # Chọn video để lấy ảnh
         video_path = filedialog.askopenfilename(title="Chọn video", filetypes=[("Video Files", "*.mp4 *.avi *.mov")])
 
@@ -648,7 +493,11 @@ def getProfile(id):
 
 import numpy as np  # Thêm thư viện numpy
 
-def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=3, motion_threshold=50):
+def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=30, motion_threshold=50, min_time_between_records=60):
+    # Kết nối đến cơ sở dữ liệu SQLite
+    conn = sqlite3.connect('FaceBaseNew.db')
+    cursor = conn.cursor()
+
     # Đọc file encodings
     encodings_path = os.path.join(os.getcwd(), "encodings", "encodings.pickle")
     with open(encodings_path, "rb") as f:
@@ -672,6 +521,9 @@ def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=3,
     message = ""  # Khởi tạo biến thông báo
     message_time = 0  # Thời gian hiển thị thông báo
 
+    # Dictionary để lưu thời gian ghi nhận lần cuối cùng của mỗi ID
+    last_recorded_time = {}
+
     while True:
         ret, im = cam.read()
         frame_count += 1
@@ -694,7 +546,7 @@ def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=3,
         # Tính độ khác biệt giữa khung hình hiện tại và khung hình trước
         frame_diff = cv2.absdiff(prev_frame, gray_frame)
         thresh = cv2.threshold(frame_diff, motion_threshold, 255, cv2.THRESH_BINARY)[1]
-        motion_detected = cv2.countNonZero(thresh) > 1000  # Kiểm tra xem có chuyển động không
+        motion_detected = cv2.countNonZero(thresh) > 25000  # Kiểm tra xem có chuyển động không
 
         if motion_detected:
             # Phát hiện khuôn mặt trong khung hình đã thay đổi kích thước
@@ -710,7 +562,6 @@ def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=3,
                 face_distances = face_recognition.face_distance(data["encodings"], encoding)
                 best_match_index = None
                 if True in matches:
-                    # Lấy chỉ số của khuôn mặt khớp nhất
                     best_match_index = face_distances.argmin()
                     if matches[best_match_index]:
                         name = data["names"][best_match_index]
@@ -720,17 +571,30 @@ def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=3,
                 cv2.rectangle(im, (left, top), (right, bottom), (225, 0, 0), 2)
 
                 if name != "Unknown":
-                    # Tách phần số từ tên ID nếu cần thiết
                     try:
                         Id = int(name.split('_')[1])  # Chuyển đổi name về dạng int (Id)
                     except (IndexError, ValueError):
                         print(f"Invalid ID format: {name}")
-                        continue  # Bỏ qua nếu không thể chuyển đổi
+                        continue
 
                     profile = getProfile(Id)
 
                     if profile is not None:
-                        # Cập nhật file attendance
+                        current_time = time.time()
+
+                        # Kiểm tra nếu ID đã ghi nhận trong khoảng thời gian gần đây
+                        if Id in last_recorded_time:
+                            time_since_last_record = current_time - last_recorded_time[Id]
+                            if time_since_last_record < min_time_between_records:
+                                continue  # Bỏ qua nếu chưa đủ thời gian
+
+                        # Cập nhật thời gian ghi nhận lần cuối của ID
+                        last_recorded_time[Id] = current_time
+
+                        ts = time.time()
+                        timeStamp = datetime.datetime.fromtimestamp(ts).strftime('%H:%M:%S')
+                        aa = profile[1]
+
                         arrId = []
                         if os.path.isfile(fileName):
                             with open(fileName) as f:
@@ -740,35 +604,52 @@ def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=3,
                                         arrId.append(Id)
 
                         if arrId.count(Id) == 0:
-                            ts = time.time()
-                            timeStamp = datetime.datetime.fromtimestamp(ts).strftime('%H:%M:%S')
-                            aa = profile[1]
+                            # Khi trạng thái là 'In', lưu thời gian vào
                             status = 'In'
                             attendance.loc[len(attendance)] = [Id, aa, date, timeStamp, status]
                             attendance_statistic.loc[len(attendance_statistic)] = [Id, aa, date, timeStamp, '0', '0']
-                            message = f"Diem Danh {aa} Vao Ca Thanh Cong"  # Cập nhật thông báo
-                            message_time = time.time()  # Lưu thời gian hiển thị thông báo
+                            message = f"Diem Danh {aa} Vao Ca Thanh Cong"
+                            message_time = time.time()
+
+                            cursor.execute("INSERT INTO Attendance (PersonId, Date, Time, Status) VALUES (?, ?, ?, ?)",
+                                           (Id, date, timeStamp, status))
+                            # Lưu thời gian vào bảng AttendanceStatistic
+                            cursor.execute(
+                                "INSERT INTO AttendanceStatistic (PersonId, Date, TimeIn, TimeOut, TotalTime) VALUES (?, ?, ?, ?, ?)",
+                                (Id, date, timeStamp, '0', '0'))
+                            conn.commit()
 
                         elif arrId.count(Id) == 1:
-                            ts = time.time()
-                            timeStamp = datetime.datetime.fromtimestamp(ts).strftime('%H:%M:%S')
-                            aa = profile[1]
+                            # Khi trạng thái là 'Out', cập nhật thời gian ra và tính tổng thời gian
                             status = 'Out'
                             attendance.loc[len(attendance)] = [Id, aa, date, timeStamp, status]
-                            message = f"Diem Danh {aa} Ra Ca Thanh Cong"  # Cập nhật thông báo
-                            message_time = time.time()  # Lưu thời gian hiển thị thông báo
-                            df = pd.read_csv(fileName_statistic)
+                            message = f"Diem Danh {aa} Ra Ca Thanh Cong"
+                            message_time = time.time()
 
-                            with open(fileName_statistic) as f:
-                                reader = csv.reader(f)
-                                index = df.index[df['Id'] == Id].tolist()
-                                for row in reader:
-                                    if row[0] == str(Id):
-                                        df.loc[index[0], 'Time Out'] = timeStamp
-                                        df.loc[index[0], 'Total time'] = (
-                                            datetime.datetime.strptime(timeStamp, '%H:%M:%S') -
-                                            datetime.datetime.strptime(row[3], '%H:%M:%S')).total_seconds()
-                                        df.to_csv(fileName_statistic, index=False)
+                            # Lấy dữ liệu TimeIn từ AttendanceStatistic
+                            df = pd.read_csv(fileName_statistic)
+                            index = df.index[df['Id'] == Id].tolist()
+
+                            if index:
+                                time_in_str = df.loc[index[0], 'Time In']
+                                # Tính tổng thời gian làm việc
+                                total_time = (datetime.datetime.strptime(timeStamp, '%H:%M:%S') -
+                                              datetime.datetime.strptime(time_in_str, '%H:%M:%S')).total_seconds()
+
+                                # Cập nhật các giá trị Time Out và Total time trong DataFrame
+                                df.loc[index[0], 'Time Out'] = timeStamp
+                                df.loc[index[0], 'Total time'] = total_time
+                                df.to_csv(fileName_statistic, index=False)
+
+                                # Ghi vào cơ sở dữ liệu Attendance
+                                cursor.execute(
+                                    "INSERT INTO Attendance (PersonId, Date, Time, Status) VALUES (?, ?, ?, ?)",
+                                    (Id, date, timeStamp, status))
+                                # Cập nhật AttendanceStatistic với TimeOut và Total time
+                                cursor.execute(
+                                    "UPDATE AttendanceStatistic SET TimeOut = ?, TotalTime = ? WHERE PersonId = ? AND Date = ?",
+                                    (timeStamp, total_time, Id, date))
+                                conn.commit()
 
                         cv2.putText(im, "Id: " + str(profile[0]), (left, bottom + 30), font, 0.75, (255, 255, 255), 2)
                         cv2.putText(im, "Name: " + str(profile[1]), (left, bottom + 60), font, 0.75, (255, 255, 255), 2)
@@ -780,14 +661,11 @@ def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=3,
             attendance = attendance.drop_duplicates(subset=['Id'], keep='first')
             attendance_statistic = attendance_statistic.drop_duplicates(subset=['Id'], keep='first')
 
-        # Cập nhật khung hình trước
         prev_frame = gray_frame.copy()
 
-        # Hiển thị thông báo nếu có
-        if message and (time.time() - message_time <= 3):  # Hiển thị trong 3 giây
-            # Tạo nền màu xanh cho thông báo
-            cv2.rectangle(im, (0, im.shape[0] - 60), (im.shape[1], im.shape[0]), (0, 255, 0), -1)  # Nền xanh
-            cv2.putText(im, message, (10, im.shape[0] - 30), font, 0.75, (255, 255, 255), 2)  # Văn bản trắng
+        if message and (time.time() - message_time <= 3):
+            cv2.rectangle(im, (0, im.shape[0] - 60), (im.shape[1], im.shape[0]), (0, 255, 0), -1)
+            cv2.putText(im, message, (10, im.shape[0] - 30), font, 0.75, (255, 255, 255), 2)
 
         cv2.imshow('im', im)
 
@@ -804,154 +682,10 @@ def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=3,
     else:
         attendance_statistic.to_csv(fileName_statistic, mode='a', index=False)
 
+    conn.close()  # Đóng kết nối cơ sở dữ liệu
     cam.release()
     cv2.destroyAllWindows()
 
-# def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=3, motion_threshold=50):
-#     # Đọc file encodings
-#     encodings_path = os.path.join(os.getcwd(), "encodings", "encodings.pickle")
-#     with open(encodings_path, "rb") as f:
-#         data = pickle.load(f)
-#
-#     cam = cv2.VideoCapture(0)
-#     cam.set(3, 1920)
-#     cam.set(4, 1080)
-#     font = cv2.FONT_HERSHEY_SIMPLEX
-#     ts = time.time()
-#     date = datetime.datetime.fromtimestamp(ts).strftime('%d-%m-%Y')
-#     fileName = r"Attendance\Attendance_" + date + ".csv"
-#     fileName_statistic = r"AttendanceStatistic\AttendanceStatistic_" + date + ".csv"
-#     col_names = ['Id', 'Name', 'Date', 'Time', 'Status']
-#     col_name_statistic = ['Id', 'Name', 'Date', 'Time In', 'Time Out', 'Total time']
-#     attendance = pd.DataFrame(columns=col_names)
-#     attendance_statistic = pd.DataFrame(columns=col_name_statistic)
-#
-#     frame_count = 0  # Đếm số khung hình đã xử lý
-#     prev_frame = None  # Khung hình trước
-#
-#     while True:
-#         ret, im = cam.read()
-#         frame_count += 1
-#
-#         # Chỉ xử lý sau mỗi n khung hình
-#         if frame_count % process_every_n_frames != 0:
-#             continue
-#
-#         # Giảm kích thước khung hình
-#         small_frame = cv2.resize(im, (0, 0), fx=frame_resize_scale, fy=frame_resize_scale)
-#         rgb = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-#
-#         # Chuyển đổi khung hình sang màu xám để so sánh
-#         gray_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
-#
-#         if prev_frame is None:
-#             prev_frame = gray_frame
-#             continue
-#
-#         # Tính độ khác biệt giữa khung hình hiện tại và khung hình trước
-#         frame_diff = cv2.absdiff(prev_frame, gray_frame)
-#         thresh = cv2.threshold(frame_diff, motion_threshold, 255, cv2.THRESH_BINARY)[1]
-#         motion_detected = cv2.countNonZero(thresh) > 1000  # Kiểm tra xem có chuyển động không
-#
-#         if motion_detected:
-#             # Phát hiện khuôn mặt trong khung hình đã thay đổi kích thước
-#             boxes = face_recognition.face_locations(rgb, model="hog")
-#             encodings = face_recognition.face_encodings(rgb, boxes)
-#
-#             for (box, encoding) in zip(boxes, encodings):
-#                 # So sánh với encodings đã biết
-#                 matches = face_recognition.compare_faces(data["encodings"], encoding, tolerance=tolerance)
-#                 name = "Unknown"
-#
-#                 # Kiểm tra nếu có khớp giữa các encodings
-#                 face_distances = face_recognition.face_distance(data["encodings"], encoding)
-#                 best_match_index = None
-#                 if True in matches:
-#                     # Lấy chỉ số của khuôn mặt khớp nhất
-#                     best_match_index = face_distances.argmin()
-#                     if matches[best_match_index]:
-#                         name = data["names"][best_match_index]
-#
-#                 # Tính toán lại vị trí của khung mặt trên khung hình gốc
-#                 (top, right, bottom, left) = [int(pos / frame_resize_scale) for pos in box]
-#                 cv2.rectangle(im, (left, top), (right, bottom), (225, 0, 0), 2)
-#
-#                 if name != "Unknown":
-#                     # Tách phần số từ tên ID nếu cần thiết
-#                     try:
-#                         Id = int(name.split('_')[1])  # Chuyển đổi name về dạng int (Id)
-#                     except (IndexError, ValueError):
-#                         print(f"Invalid ID format: {name}")
-#                         continue  # Bỏ qua nếu không thể chuyển đổi
-#
-#                     profile = getProfile(Id)
-#
-#                     if profile is not None:
-#                         # Cập nhật file attendance
-#                         arrId = []
-#                         if os.path.isfile(fileName):
-#                             with open(fileName) as f:
-#                                 reader = csv.reader(f)
-#                                 for row in reader:
-#                                     if row[0] == str(Id):
-#                                         arrId.append(Id)
-#
-#                         if arrId.count(Id) == 0:
-#                             ts = time.time()
-#                             timeStamp = datetime.datetime.fromtimestamp(ts).strftime('%H:%M:%S')
-#                             aa = profile[1]
-#                             status = 'In'
-#                             attendance.loc[len(attendance)] = [Id, aa, date, timeStamp, status]
-#                             attendance_statistic.loc[len(attendance_statistic)] = [Id, aa, date, timeStamp, '0', '0']
-#
-#                         elif arrId.count(Id) == 1:
-#                             ts = time.time()
-#                             timeStamp = datetime.datetime.fromtimestamp(ts).strftime('%H:%M:%S')
-#                             aa = profile[1]
-#                             status = 'Out'
-#                             attendance.loc[len(attendance)] = [Id, aa, date, timeStamp, status]
-#                             df = pd.read_csv(fileName_statistic)
-#
-#                             with open(fileName_statistic) as f:
-#                                 reader = csv.reader(f)
-#                                 index = df.index[df['Id'] == Id].tolist()
-#                                 for row in reader:
-#                                     if row[0] == str(Id):
-#                                         df.loc[index[0], 'Time Out'] = timeStamp
-#                                         df.loc[index[0], 'Total time'] = (
-#                                             datetime.datetime.strptime(timeStamp, '%H:%M:%S') -
-#                                             datetime.datetime.strptime(row[3], '%H:%M:%S')).total_seconds()
-#                                         df.to_csv(fileName_statistic, index=False)
-#
-#                         cv2.putText(im, "Id: " + str(profile[0]), (left, bottom + 30), font, 0.75, (255, 255, 255), 2)
-#                         cv2.putText(im, "Name: " + str(profile[1]), (left, bottom + 60), font, 0.75, (255, 255, 255), 2)
-#                     else:
-#                         cv2.putText(im, "Name: Unknown", (left, bottom + 30), font, 0.75, (0, 0, 255), 2)
-#                 else:
-#                     cv2.putText(im, "Name: Unknown", (left, bottom + 30), font, 0.75, (0, 0, 255), 2)
-#
-#             attendance = attendance.drop_duplicates(subset=['Id'], keep='first')
-#             attendance_statistic = attendance_statistic.drop_duplicates(subset=['Id'], keep='first')
-#
-#         # Cập nhật khung hình trước
-#         prev_frame = gray_frame.copy()
-#         cv2.imshow('im', im)
-#
-#         if cv2.waitKey(1) == ord('q'):
-#             break
-#
-#     if os.path.isfile(fileName):
-#         attendance.to_csv(fileName, mode='a', index=False, header=False)
-#     else:
-#         attendance.to_csv(fileName, mode='a', index=False)
-#
-#     if os.path.isfile(fileName_statistic):
-#         attendance_statistic.to_csv(fileName_statistic, mode='a', index=False, header=False)
-#     else:
-#         attendance_statistic.to_csv(fileName_statistic, mode='a', index=False)
-#
-#     cam.release()
-#     cv2.destroyAllWindows()
-#     msgbox.showinfo("Message", 'Bạn đã chấm công thành công!')
+
 
 

@@ -14,8 +14,8 @@ def open_add_new():
 def open_management():
     management_window = tk.Toplevel()
     management_window.title("Quản Lý Nhân Viên")
-    width = 400
-    height = 300
+    width = 900
+    height = 550
     screen_width = management_window.winfo_screenwidth()
     screen_height = management_window.winfo_screenheight()
     x = (screen_width // 2) - (width // 2)
