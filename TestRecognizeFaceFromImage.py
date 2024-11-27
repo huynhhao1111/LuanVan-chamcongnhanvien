@@ -55,6 +55,6 @@ def TestRecognizeFaceFromImage(image_path, tolerance=0.4, display_width=800):
 
 if __name__ == "__main__":
     # Đường dẫn tới ảnh cần kiểm tra
-    image_path = "Test_Image/test6.jpg"
+    image_path = "Test_Image/test5.jpg"
     TestRecognizeFaceFromImage(image_path)
 

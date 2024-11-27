@@ -10,28 +10,39 @@ def create_tables():
     conn = connect_db()
     cursor = conn.cursor()
 
-    # Tạo bảng Attendance
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS Attendance (
-        Id INTEGER PRIMARY KEY AUTOINCREMENT,
-        PersonId INTEGER,
-        Date DATE NOT NULL,
-        Time TIME NOT NULL,
-        Status TEXT CHECK(Status IN ('In', 'Out')),
-        FOREIGN KEY (PersonId) REFERENCES People(id)
-    )
-    ''')
+    # # Tạo bảng Attendance
+    # cursor.execute('''
+    # CREATE TABLE IF NOT EXISTS Attendance (
+    #     Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    #     PersonId INTEGER,
+    #     Date DATE NOT NULL,
+    #     Time TIME NOT NULL,
+    #     Status TEXT CHECK(Status IN ('In', 'Out')),
+    #     FOREIGN KEY (PersonId) REFERENCES People(id)
+    # )
+    # ''')
+    #
+    # # Tạo bảng AttendanceStatistic
+    # cursor.execute('''
+    # CREATE TABLE IF NOT EXISTS AttendanceStatistic (
+    #     Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    #     PersonId INTEGER,
+    #     Date DATE NOT NULL,
+    #     TimeIn TIME NOT NULL,
+    #     TimeOut TIME NOT NULL,
+    #     TotalTime INTEGER,
+    #     FOREIGN KEY (PersonId) REFERENCES People(id)
+    # )
+    # ''')
 
-    # Tạo bảng AttendanceStatistic
     cursor.execute('''
-    CREATE TABLE IF NOT EXISTS AttendanceStatistic (
+    CREATE TABLE IF NOT EXISTS Leave (
         Id INTEGER PRIMARY KEY AUTOINCREMENT,
         PersonId INTEGER,
         Date DATE NOT NULL,
-        TimeIn TIME NOT NULL,
-        TimeOut TIME NOT NULL,
-        TotalTime INTEGER,
-        FOREIGN KEY (PersonId) REFERENCES People(id)
+        LeaveType TEXT CHECK(LeaveType IN ('Paid', 'Unpaid')),
+        Reason TEXT,
+        FOREIGN KEY (PersonId) REFERENCES People(Id)
     )
     ''')
 

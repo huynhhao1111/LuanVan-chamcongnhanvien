@@ -6,7 +6,7 @@ def delete_all_people():
     cursor = conn.cursor()
 
     # Thực hiện truy vấn xóa tất cả bản ghi
-    cursor.execute("DELETE FROM AttendanceStatistic")
+    cursor.execute("DELETE FROM Leave")
 
     # Lưu thay đổi và đóng kết nối
     conn.commit()

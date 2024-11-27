@@ -1,120 +1,178 @@
-import tkinter as tk
-from tkinter import *
-from train import TakeImages, TrainAllImages, extract_images_from_video  # Nhập hàm extract_images_from_video
-import tkinter.messagebox as msgbox
-import tkinter.font as font
 import os
+import tkinter as tk
+from tkinter import font, StringVar, filedialog, messagebox
 import cv2
-from tkinter import filedialog
-from tkinter import ttk
+from train import TakeImages, TrainAllImages, extract_images_from_video
 
+def show_message(title, message, message_type="info"):
+    window = tk.Toplevel()
+    window.title(title)
 
-def demo(e1, e2, e3, gender_var, position_var, department_var):
-    Id = str(e1.get())
-    name = str(e2.get())
-    age = str(e3.get())
-    gender = str(gender_var.get())  # Lấy giá trị giới tính từ gender_var
-    position = str(position_var.get())  # Lấy giá trị vị trí từ position_var
+    # Kích thước cửa sổ
+    window_width = 300
+    window_height = 150
+
+    # Lấy kích thước màn hình
+    screen_width = window.winfo_screenwidth()
+    screen_height = window.winfo_screenheight()
+
+    # Tính toán tọa độ để canh giữa
+    x_coordinate = (screen_width // 2) - (window_width // 2)
+    y_coordinate = (screen_height // 2) - (window_height // 2)
+
+    # Đặt vị trí cửa sổ
+    window.geometry(f"{window_width}x{window_height}+{x_coordinate}+{y_coordinate}")
+    window.resizable(False, False)
+
+    # Xác định màu sắc biểu tượng dựa trên loại thông báo
+    if message_type == "info":
+        icon_color = "green"
+    elif message_type == "error":
+        icon_color = "red"
+    elif message_type == "warning":
+        icon_color = "orange"
+    else:
+        icon_color = "blue"
+
+    # Nội dung thông báo
+    tk.Label(window, text=title, font=("Arial", 14, "bold"), fg=icon_color).pack(pady=10)
+    tk.Label(window, text=message, font=("Arial", 12), wraplength=280).pack(pady=10)
+    tk.Button(window, text="Đóng", command=window.destroy).pack(pady=10)
+
+    # Làm cho cửa sổ trở thành cửa sổ con
+    window.transient()
+    window.grab_release()
+
+def demo(e1, e2, e3, gender_var, position_var, department_var, root):
+    Id = str(e1.get()).strip()
+    name = str(e2.get()).strip()
+    age = str(e3.get()).strip()
+    gender = str(gender_var.get())
+    position = str(position_var.get())
     department = str(department_var.get())
-    msg = TakeImages(Id, name, age, gender, position, department)
 
-
-def add_existing_images(e1, e2):
-    files = filedialog.askopenfilenames(title="Chọn hình ảnh", filetypes=[("Image Files", "*.jpg *.png *.jpeg")])
-
-    if not files:
+    # Kiểm tra thông tin bắt buộc
+    if not Id:
+        show_message("Lỗi", "Vui lòng nhập Mã Nhân Viên.", "error")
+        return
+    if not name:
+        show_message("Lỗi", "Vui lòng nhập Tên Nhân Viên.", "error")
+        return
+    if not age:
+        show_message("Lỗi", "Vui lòng nhập Tuổi.", "error")
         return
 
-    Id = str(e1.get())
-    name = str(e2.get())
+    TakeImages(Id, name, age, gender, position, department)
 
-    # Tạo thư mục cho nhân viên
+
+def add_existing_images(e1, e2, root):
+    Id = str(e1.get()).strip()
+    name = str(e2.get()).strip()
+
+    # Kiểm tra thông tin bắt buộc
+    if not Id:
+        show_message("Lỗi", "Vui lòng nhập Mã Nhân Viên.", "error")
+        return
+    if not name:
+        show_message("Lỗi", "Vui lòng nhập Tên Nhân Viên.", "error")
+        return
+
+    files = filedialog.askopenfilenames(title="Chọn hình ảnh", filetypes=[("Image Files", "*.jpg *.png *.jpeg")])
+    if not files:
+        show_message("Thông báo", "Bạn chưa chọn ảnh nào.", "warning")
+        return
+
     employee_folder = f"TrainingImage/{name}_{Id}"
-    os.makedirs(employee_folder, exist_ok=True)  # Tạo thư mục nếu chưa tồn tại
+    os.makedirs(employee_folder, exist_ok=True)
 
     for image_path in files:
         img = cv2.imread(image_path)
         if img is not None:
-            # Lưu hình ảnh vào thư mục đã tạo
             image_name = os.path.basename(image_path)
-            save_path = os.path.join(employee_folder, image_name)  # Lưu vào thư mục nhân viên
+            save_path = os.path.join(employee_folder, image_name)
             cv2.imwrite(save_path, img)
 
-    msgbox.showinfo("Thông báo", "Hình ảnh đã được lưu thành công.")
 
-
-def extract_video_images(e1, e2, e3,gender_var , position_var, department_var):  # Hàm mới để gọi extract_images_from_video
-    Id = str(e1.get())
-    name = str(e2.get())
-    age = str(e3.get())
-    gender = str(gender_var.get())  # Lấy giá trị giới tính từ gender_var
-    position = str(position_var.get())  # Lấy giá trị vị trí từ position_var
+def extract_video_images(e1, e2, e3, gender_var, position_var, department_var, root):
+    Id = str(e1.get()).strip()
+    name = str(e2.get()).strip()
+    age = str(e3.get()).strip()
+    gender = str(gender_var.get())
+    position = str(position_var.get())
     department = str(department_var.get())
 
-    # Gọi hàm extract_images_from_video
-    extract_images_from_video(Id, name, age, gender, position, department)
+    # Kiểm tra thông tin bắt buộc
+    if not Id:
+        show_message("Lỗi", "Vui lòng nhập Mã Nhân Viên.", "error")
+        return
+    if not name:
+        show_message("Lỗi", "Vui lòng nhập Tên Nhân Viên.", "error")
+        return
+    if not age:
+        show_message("Lỗi", "Vui lòng nhập Tuổi.", "error")
+        return
 
+    extract_images_from_video(Id, name, age, gender, position, department, root)
+    # show_message("Thành công", "Hình ảnh từ video đã được lưu thành công.", "info")
+    # draw_ui(root)
 
-def draw_ui():
-    master = tk.Tk()
-    width = 900
-    height = 550  # Điều chỉnh lại chiều cao để phù hợp với các trường mới
-    screen_width = master.winfo_screenwidth()
-    screen_height = master.winfo_screenheight()
-    x = (screen_width / 2) - (width / 2)
-    y = (screen_height / 2) - (height / 2)
-    master.geometry("%dx%d+%d+%d" % (width, height, x, y))
-    master.title("Thêm mới nhân viên")
-    helv24 = font.Font(family='Helvetica', size=16, weight=font.BOLD)
+import tkinter as tk
+from tkinter import font, StringVar
 
-    tk.Label(master, text="Mã Nhân Viên", font=helv24).place(x=150, y=50, anchor="center")
-    tk.Label(master, text="Tên Nhân Viên", font=helv24).place(x=150, y=100, anchor="center")
-    tk.Label(master, text="Tuổi", font=helv24).place(x=150, y=150, anchor="center")
-    tk.Label(master, text="Giới tính", font=helv24).place(x=150, y=200, anchor="center")
-    tk.Label(master, text="Chức Vụ", font=helv24).place(x=150, y=250, anchor="center")
-    tk.Label(master, text="Phòng Ban", font=helv24).place(x=150, y=300, anchor="center")
+def draw_ui(root):
+    # Tạo cửa sổ mới (Toplevel) thay vì Tk()
+    new_window = tk.Toplevel(root)
+    new_window.title("Thêm mới nhân viên")
+    new_window.configure(bg='#f9f9f9')
+    width, height = 900, 550
+    screen_width, screen_height = new_window.winfo_screenwidth(), new_window.winfo_screenheight()
+    x_coordinate, y_coordinate = (screen_width - width) // 2, (screen_height - height) // 2
+    new_window.geometry(f"{width}x{height}+{x_coordinate}+{y_coordinate}")
 
-    e1 = tk.Entry(master, width=30)
-    e2 = tk.Entry(master, width=30)
-    e3 = tk.Entry(master, width=30)
+    header_font = font.Font(family='Helvetica', size=20, weight=font.BOLD)
+    label_font = font.Font(family='Helvetica', size=14)
+    button_font = font.Font(family='Helvetica', size=12)
 
-    # Tạo OptionMenu cho giới tính
-    gender_var = StringVar(master)
-    gender_var.set("Nam")  # Giá trị mặc định
-    gender_menu = tk.OptionMenu(master, gender_var, "Nam", "Nữ")
-    gender_menu.config(width=28)  # Điều chỉnh kích thước
+    # Header
+    tk.Label(new_window, text="Thêm Mới Nhân Viên", font=header_font, bg='#f9f9f9', fg="#333333").pack(pady=20)
 
-    # Tạo OptionMenu cho vị trí
-    position_var = StringVar(master)
-    position_var.set("Nhân viên")  # Giá trị mặc định
-    position_menu = tk.OptionMenu(master, position_var, "Nhân viên", "Giám đốc", "Trưởng phòng", "Phó phòng")
-    position_menu.config(width=28)
+    # Input frame
+    input_frame = tk.Frame(new_window, bg='#f9f9f9')
+    input_frame.pack(pady=20)
 
-    # Tạo OptionMenu cho phòng ban
-    department_var = StringVar(master)
-    department_var.set("Marketing")  # Giá trị mặc định
-    department_menu = tk.OptionMenu(master, department_var, "Marketing", "Social", "Kỹ thuật", "Hành chính", "Nhân sự", "Biên tập")
-    department_menu.config(width=28)
+    labels = ["Mã Nhân Viên", "Tên Nhân Viên", "Tuổi", "Giới Tính", "Chức Vụ", "Phòng Ban"]
+    e1, e2, e3 = tk.Entry(input_frame, width=30), tk.Entry(input_frame, width=30), tk.Entry(input_frame, width=30)
 
+    gender_var, position_var, department_var = StringVar(new_window), StringVar(new_window), StringVar(new_window)
+    gender_var.set("Nam")
+    position_var.set("Nhân viên")
+    department_var.set("Marketing")
 
+    inputs = [
+        e1,
+        e2,
+        e3,
+        tk.OptionMenu(input_frame, gender_var, "Nam", "Nữ"),
+        tk.OptionMenu(input_frame, position_var, "Nhân viên", "Giám đốc", "Trưởng phòng", "Phó phòng"),
+        tk.OptionMenu(input_frame, department_var, "Marketing", "Social", "Kỹ thuật", "Hành chính", "Nhân sự", "Biên tập")
+    ]
 
-    e1.place(x=300, y=50, anchor="center", height=20)
-    e2.place(x=300, y=100, anchor="center", height=20)
-    e3.place(x=300, y=150, anchor="center", height=20)
-    gender_menu.place(x=300, y=200, anchor="center", height=20)
-    position_menu.place(x=300, y=250, anchor="center", height=20)
-    department_menu.place(x=300, y=300, anchor="center", height=20)
+    for i, (label, input_widget) in enumerate(zip(labels, inputs)):
+        tk.Label(input_frame, text=label, font=label_font, bg='#f9f9f9', anchor="w").grid(row=i, column=0, padx=20, pady=10, sticky="w")
+        input_widget.grid(row=i, column=1, padx=20, pady=10, sticky="ew")
 
-    # Button "Lấy ảnh" (kêu gọi hàm demo)
-    tk.Button(master, text="Lấy ảnh", bg="#01a157", fg='white', font=helv24,
-              command=lambda: demo(e1, e2, e3, gender_var, position_var, department_var)).place(x=200, y=350, anchor="center")
+    # Buttons frame
+    button_frame = tk.Frame(new_window, bg='#f9f9f9')
+    button_frame.pack(pady=20)
 
-    # Nút lấy ảnh từ video
-    tk.Button(master, text="Lấy ảnh từ video", bg="#ff5733", fg='white', font=helv24,
-              command=lambda: extract_video_images(e1, e2, e3, gender_var, position_var, department_var)).place(x=400, y=350, anchor="center")
+    tk.Button(button_frame, text="Lấy Ảnh", bg="#01a157", fg="white", font=button_font,
+              command=lambda: demo(e1, e2, e3, gender_var, position_var, department_var, root)).grid(row=0, column=0, padx=10)
 
-    # Nút Train ảnh
-    tk.Button(master, text="Train Lại Tất Cả Dữ Liệu", bg="#00c0ef", fg='white', font=helv24,
-              command=lambda: TrainAllImages("TrainingImage")).place(x=500, y=350)
+    tk.Button(button_frame, text="Lấy Ảnh Từ Video", bg="#ff5733", fg="white", font=button_font,
+              command=lambda: extract_video_images(e1, e2, e3, gender_var, position_var, department_var, root)).grid(row=0, column=1, padx=10)
 
-    master.mainloop()
+    tk.Button(button_frame, text="Train Lại Tất Cả", bg="#00c0ef", fg="white", font=button_font,
+              command=lambda: TrainAllImages("TrainingImage")).grid(row=0, column=2, padx=10)
+
+    new_window.mainloop()
+
