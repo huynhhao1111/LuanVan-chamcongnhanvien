@@ -62,7 +62,7 @@ def demo(e1, e2, e3, gender_var, position_var, department_var, root):
         show_message("Lỗi", "Vui lòng nhập Tuổi.", "error")
         return
 
-    TakeImages(Id, name, age, gender, position, department)
+    TakeImages(Id, name, age, gender, position, department, root)
 
 
 def add_existing_images(e1, e2, root):

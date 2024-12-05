@@ -133,8 +133,9 @@ def add_attendance_form():
             conn = sqlite3.connect('FaceBaseNew.db')
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO AttendanceStatistic (PersonId, Date, TimeIn, TimeOut, TotalTime) VALUES (?, ?, ?, ?, ?)",
-                (person_id, date, time_in, time_out, 0))  # TotalTime will be calculated later
+                "UPDATE AttendanceStatistic SET TimeIn = ?, TimeOut = ?, TotalTime = ? WHERE PersonId = ? AND Date = ?",
+                (time_in, time_out, 0, person_id, date)
+            ) # TotalTime will be calculated later
             cursor.execute(
                 "INSERT INTO Attendance (PersonId, Date, Time, Status) VALUES (?, ?, ?, ?)",
                 (person_id, date, time_in, 'In')

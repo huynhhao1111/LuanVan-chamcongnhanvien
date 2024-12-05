@@ -81,17 +81,17 @@ def attendance():
     search_frame = tk.Frame(root, bg='#f7f9fc')
     search_frame.pack(pady=15)
 
-    id_label = tk.Label(search_frame, text="Nhập ID:", font=("Arial", 14, "bold"), bg='#f7f9fc')
+    id_label = tk.Label(search_frame, text="Nhập ID:", font=("Arial", 18, "bold"), bg='#f7f9fc')
     id_label.pack(side=tk.LEFT, padx=10)
 
-    id_entry = tk.Entry(search_frame, font=("Arial", 14), width=20)
+    id_entry = tk.Entry(search_frame, font=("Arial", 18), width=20)
     id_entry.pack(side=tk.LEFT, padx=10)
 
     search_button = tk.Button(
         search_frame,
         text="Tìm Kiếm",
-        font=("Arial", 14, "bold"),
-        bg="#007BFF",
+        font=("Arial", 18, "bold"),
+        bg="#28a745",
         fg="white",
         activebackground="#0056b3",
         command=lambda: [search_attendance(checkin_tree, id_entry, "In"),

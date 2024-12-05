@@ -1,8 +1,9 @@
+import csv
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog
 from tkcalendar import DateEntry
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from add_attendance import add_attendance_form  # Import form từ file riêng
 
 
@@ -56,22 +57,27 @@ def connect_db():
 
 # Hàm tìm kiếm dữ liệu chấm công
 
+from datetime import datetime, timedelta
+import sqlite3
+
 def search_attendance(tree, id_entry, start_date_entry, end_date_entry):
     person_id = id_entry.get()
-    print(person_id)
-    start_date = start_date_entry.get_date().strftime('%d-%m-%Y')
-    end_date = end_date_entry.get_date().strftime('%d-%m-%Y')
+    start_date = start_date_entry.get_date().strftime('%Y-%m-%d')  # Lấy ngày từ DateEntry
+    end_date = end_date_entry.get_date().strftime('%Y-%m-%d')  # Lấy ngày từ DateEntry
 
     for row in tree.get_children():
         tree.delete(row)
 
     conn, cursor = connect_db()
+
     try:
+
         query = """
             SELECT a.Date, a.PersonId, p.Name, a.TimeIn, a.TimeOut
             FROM AttendanceStatistic a
             JOIN People p ON a.PersonId = p.ID
-            WHERE a.Date BETWEEN ? AND ?
+            WHERE STRFTIME('%Y-%m-%d', SUBSTR(a.Date, 7, 4) || '-' || SUBSTR(a.Date, 4, 2) || '-' || SUBSTR(a.Date, 1, 2))
+            BETWEEN ? AND ?
         """
         params = [start_date, end_date]
 
@@ -79,38 +85,81 @@ def search_attendance(tree, id_entry, start_date_entry, end_date_entry):
             query += " AND a.PersonId = ?"
             params.append(person_id)
 
-        # Thêm ORDER BY sau khi xây dựng xong WHERE
-        query += " ORDER BY a.Date"
+        query += " ORDER BY STRFTIME('%Y-%m-%d', SUBSTR(a.Date, 7, 4) || '-' || SUBSTR(a.Date, 4, 2) || '-' || SUBSTR(a.Date, 1, 2))"
 
         cursor.execute(query, params)
         rows = cursor.fetchall()
+        # Lấy danh sách tất cả nhân viên để kiểm tra xem ai chưa có điểm danh
+        cursor.execute("SELECT id FROM People")
+        all_employees = cursor.fetchall()
+
+        # Kiểm tra mỗi nhân viên trong khoảng thời gian đã chọn
+        for employee in all_employees:
+            person_id = employee[0]
+            current_date = datetime.strptime(start_date, '%Y-%m-%d')  # Chuyển start_date sang đối tượng datetime
+
+            while current_date <= datetime.strptime(end_date, '%Y-%m-%d'):  # So sánh với end_date
+                formatted_date = current_date.strftime('%d-%m-%Y')  # Định dạng ngày là %d-%m-%Y
+
+                # Kiểm tra xem nhân viên đã có điểm danh chưa
+                cursor.execute("SELECT * FROM AttendanceStatistic WHERE PersonId = ? AND Date = ?",
+                               (person_id, formatted_date))
+                if not cursor.fetchone():  # Nếu chưa có, chèn bản ghi mới
+                    cursor.execute("""
+                                INSERT INTO AttendanceStatistic (PersonId, Date, TimeIn, TimeOut, TotalTime)
+                                VALUES (?, ?, '00:00:00', '00:00:00', 0)
+                            """, (person_id, formatted_date))
+
+                # Cộng thêm một ngày vào current_date
+                current_date = current_date + timedelta(days=1)
 
         for row in rows:
-            time_in = row[3] if row[3] != '0' else '00:00:00'
-            time_out = row[4] if row[4] != '0' else '00:00:00'
-            time_in_obj = datetime.strptime(time_in, "%H:%M:%S")
-            time_out_obj = datetime.strptime(time_out, "%H:%M:%S")
-
-            if time_out_obj < time_in_obj:
+            time_in = row[3]
+            time_out = row[4]
+            formatted_date = datetime.strptime(row[0], "%d-%m-%Y").strftime('%Y-%m-%d')
+            print(formatted_date)
+            if time_in == '00:00:00' and time_out == '00:00:00':  # Cả TimeIn và TimeOut đều là 0
+                cursor.execute("SELECT LeaveType FROM Leave WHERE PersonId = ? AND Date= ?", (row[1], formatted_date))
+                leave_info = cursor.fetchone()
+                print(leave_info)
+                if leave_info:
+                    status = f"Nghỉ Phép ({leave_info[0]})"
+                else:
+                    status = "Không Phép"
+                total_time_str = '00:00'
+                ot_time_str = '00:00'
+            elif time_in != '00:00:00' and time_out == '00:00:00':  # TimeIn có giá trị, TimeOut = 0
+                status = "Quên Check Out"
                 total_time_str = '00:00'
                 ot_time_str = '00:00'
             else:
+                time_in_obj = datetime.strptime(time_in, "%H:%M:%S")
+                time_out_obj = datetime.strptime(time_out, "%H:%M:%S")
                 total_time = time_out_obj - time_in_obj
                 total_hours = int(total_time.total_seconds() // 3600)
                 total_minutes = int((total_time.total_seconds() % 3600) // 60)
                 total_time_str = f"{total_hours}:{total_minutes:02d}"
+                status = "Đi Làm" if total_time.total_seconds() > 0 else "Quên Check Out"
 
-                # Tính OT (giờ làm ngoài 8 tiếng)
-                total_seconds = total_time.total_seconds()
-                ot_seconds = max(0, total_seconds - 8 * 3600)  # OT là số giây vượt quá 8 giờ
+                ot_seconds = max(0, total_time.total_seconds() - 8 * 3600)
                 ot_hours = int(ot_seconds // 3600)
                 ot_minutes = int((ot_seconds % 3600) // 60)
                 ot_time_str = f"{ot_hours}:{ot_minutes:02d}"
 
-            tree.insert('', 'end', values=(row[0], row[1], row[2], time_in, time_out, total_time_str, ot_time_str))
+            row_id = tree.insert('', 'end', values=(row[0], row[1], row[2], time_in, time_out, total_time_str, ot_time_str, status))
+
+            # Tô màu nếu cần thiết
+            if "Phép" in status:
+                tree.tag_configure('absent', background='#ffcccc')  # Màu đỏ nhạt
+                tree.item(row_id, tags='absent')
+            elif status == "Quên Check Out":
+                tree.tag_configure('warning', background='#fff0b3')  # Màu vàng nhạt
+                tree.item(row_id, tags='warning')
 
         if not rows:
             show_message("Kết quả tìm kiếm", "Không tìm thấy dữ liệu.", "info")
+        conn.commit()
+
     except Exception as e:
         show_message("Lỗi", f"Lỗi khi truy vấn dữ liệu: {e}", "error")
     finally:
@@ -308,34 +357,13 @@ import pandas as pd  # Dùng để xuất dữ liệu ra file Excel hoặc CSV
 
 
 
+
+# Hàm preview_and_export_data đã sửa lại
 def preview_and_export_data(tree, id_entry, start_date_entry, end_date_entry):
-    # Trích xuất dữ liệu từ cơ sở dữ liệu
-    person_id = id_entry.get()
-    start_date = start_date_entry.get_date().strftime('%d-%m-%Y')
-    end_date = end_date_entry.get_date().strftime('%d-%m-%Y')
-
-    conn, cursor = connect_db()
-    try:
-        query = """
-            SELECT a.Date, a.PersonId, p.Name, a.TimeIn, a.TimeOut
-            FROM AttendanceStatistic a
-            JOIN People p ON a.PersonId = p.ID
-            WHERE a.Date BETWEEN ? AND ?
-            ORDER BY a.Date 
-
-        """
-        params = [start_date, end_date]
-        if person_id:
-            query += " AND a.PersonId = ?"
-            params.append(person_id)
-
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-    except Exception as e:
-        show_message("Lỗi", f"Lỗi khi truy vấn dữ liệu: {e}", "error")
-        return
-    finally:
-        conn.close()
+    # Kiểm tra nếu `tree` đã có dữ liệu
+    rows = []
+    for item in tree.get_children():
+        rows.append(tree.item(item, 'values'))
 
     if not rows:
         show_message("Thông báo", "Không có dữ liệu để xuất.", "info")
@@ -345,7 +373,7 @@ def preview_and_export_data(tree, id_entry, start_date_entry, end_date_entry):
     preview_window = tk.Toplevel()
     preview_window.title("Xem Trước Dữ Liệu")
 
-    # Lấy kích thước màn hình và tính toán vị trí căn giữa
+    # Tính toán vị trí căn giữa
     screen_width = preview_window.winfo_screenwidth()
     screen_height = preview_window.winfo_screenheight()
     window_width = 1000
@@ -357,99 +385,61 @@ def preview_and_export_data(tree, id_entry, start_date_entry, end_date_entry):
     preview_window.resizable(True, True)
 
     # Tạo bảng hiển thị dữ liệu
-    columns = ("Ngày", "ID Nhân Viên", "Tên Nhân Viên", "Thời Gian Vào", "Thời Gian Ra", "Tổng Thời Gian", "Giờ Làm Thêm")
+    columns = (
+        "Ngày", "ID Nhân Viên", "Tên Nhân Viên", "Thời Gian Vào", "Thời Gian Ra", "Tổng Thời Gian", "Giờ Làm Thêm",
+        "Trạng Thái")
     preview_tree = ttk.Treeview(preview_window, columns=columns, show='headings', height=15)
 
-    # Thiết lập tiêu đề cột và căn chỉnh
     for col in columns:
         preview_tree.heading(col, text=col)
-        preview_tree.column(col, anchor="center", width=140)  # Đảm bảo các cột không bị tràn
-    tree.pack(fill='both', expand=True, padx=20, pady=10)
-    # Thêm dữ liệu vào bảng
+        preview_tree.column(col, anchor="center", width=120)
+
+    preview_tree.pack(fill='both', expand=True, padx=20, pady=10)
+
+    # Thêm dữ liệu vào bảng `preview_tree`
     for row in rows:
-        time_in = row[3] if row[3] != '0' else '00:00:00'
-        time_out = row[4] if row[4] != '0' else '00:00:00'
-        time_in_obj = datetime.strptime(time_in, "%H:%M:%S")
-        time_out_obj = datetime.strptime(time_out, "%H:%M:%S")
-
-        if time_out_obj < time_in_obj:
-            total_time_str = '00:00'
-            ot_time_str = '00:00'
-        else:
-            total_time = time_out_obj - time_in_obj
-            total_hours = int(total_time.total_seconds() // 3600)
-            total_minutes = int((total_time.total_seconds() % 3600) // 60)
-            total_time_str = f"{total_hours}:{total_minutes:02d}"
-
-            # Tính OT (giờ làm ngoài 8 tiếng)
-            total_seconds = total_time.total_seconds()
-            ot_seconds = max(0, total_seconds - 8 * 3600)  # OT là số giây vượt quá 8 giờ
-            ot_hours = int(ot_seconds // 3600)
-            ot_minutes = int((ot_seconds % 3600) // 60)
-            ot_time_str = f"{ot_hours}:{ot_minutes:02d}"
-
-        preview_tree.insert('', 'end', values=(row[0], row[1], row[2], time_in, time_out, total_time_str, ot_time_str))
-
-    preview_tree.pack(expand=True, fill='both')
+        preview_tree.insert('', 'end', values=row)
 
     # Nút xuất dữ liệu ra Excel hoặc CSV
     def export_data():
         data = []
         for row in rows:
-            time_in = row[3] if row[3] != '0' else '00:00:00'
-            time_out = row[4] if row[4] != '0' else '00:00:00'
-            time_in_obj = datetime.strptime(time_in, "%H:%M:%S")
-            time_out_obj = datetime.strptime(time_out, "%H:%M:%S")
+            data.append(row)
 
-            if time_out_obj < time_in_obj:
-                total_time_str = '00:00'
-                ot_time_str = '00:00'
-            else:
-                total_time = time_out_obj - time_in_obj
-                total_hours = int(total_time.total_seconds() // 3600)
-                total_minutes = int((total_time.total_seconds() % 3600) // 60)
-                total_time_str = f"{total_hours}:{total_minutes:02d}"
+        # Xuất dữ liệu ra file CSV
+        export_to_csv(data, columns)
 
-                # Tính OT (giờ làm ngoài 8 tiếng)
-                total_seconds = total_time.total_seconds()
-                ot_seconds = max(0, total_seconds - 8 * 3600)  # OT là số giây vượt quá 8 giờ
-                ot_hours = int(ot_seconds // 3600)
-                ot_minutes = int((ot_seconds % 3600) // 60)
-                ot_time_str = f"{ot_hours}:{ot_minutes:02d}"
+    export_button = tk.Button(preview_window, text="Xuất Dữ Liệu", command=export_data)
+    export_button.pack(pady=10)
 
-            data.append([row[0], row[1], row[2], time_in, time_out, total_time_str, ot_time_str])
+def export_to_csv(data, columns):
+    # Chọn vị trí lưu file
+    file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+    if not file_path:
+        return
 
-        df = pd.DataFrame(data, columns=columns)
-        # Lưu dưới dạng Excel hoặc CSV
-        file_path = "attendance_report.xlsx"
-        df.to_excel(file_path, index=False)
-        show_message("Thông báo", f"Dữ liệu đã được xuất ra {file_path}", "info")
+    # Ghi dữ liệu vào file
+    with open(file_path, mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow(columns)  # Ghi tiêu đề
+        writer.writerows(data)  # Ghi nội dung
 
-    # Nút "Xuất" để xuất dữ liệu
-    export_button = tk.Button(preview_window, text="Xuất dữ liệu", command=export_data, bg="#4caf50", fg="white")
-    export_button.pack(pady=15)
+    show_message("Thông báo", "Dữ liệu đã được xuất thành công.", "info")
 
 def attendance_statistic():
     root = tk.Tk()
     root.title("Điều Chỉnh Thông Tin Chấm Công")
 
-    # Kích thước cửa sổ
     window_width = 1000
     window_height = 550
-
-    # Lấy kích thước màn hình
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
-
-    # Tính toán tọa độ để canh giữa
     x_coordinate = (screen_width // 2) - (window_width // 2)
     y_coordinate = (screen_height // 2) - (window_height // 2)
 
-    # Đặt vị trí cửa sổ
     root.geometry(f"{window_width}x{window_height}+{x_coordinate}+{y_coordinate}")
     root.configure(bg='#f0f0f5')
 
-    # Khung tìm kiếm
     search_frame = tk.Frame(root, bg='#e0e0eb', pady=10)
     search_frame.pack(fill='x', padx=10, pady=10)
 
@@ -458,25 +448,27 @@ def attendance_statistic():
     id_entry.grid(row=0, column=1, padx=10, pady=5)
 
     tk.Label(search_frame, text="Ngày Bắt Đầu:", bg='#e0e0eb').grid(row=0, column=2, padx=10, pady=5)
-    start_date_entry = DateEntry(search_frame, date_pattern='y-mm-dd', width=15)
+    start_date_entry = DateEntry(search_frame, date_pattern='dd-mm-yyyy', width=15)
     start_date_entry.grid(row=0, column=3, padx=10, pady=5)
 
     tk.Label(search_frame, text="Ngày Kết Thúc:", bg='#e0e0eb').grid(row=0, column=4, padx=10, pady=5)
-    end_date_entry = DateEntry(search_frame, date_pattern='y-mm-dd', width=15)
+    end_date_entry = DateEntry(search_frame, date_pattern='dd-mm-yyyy', width=15)
     end_date_entry.grid(row=0, column=5, padx=10, pady=5)
 
     search_button = tk.Button(search_frame, text="Tìm Kiếm", bg='#4caf50', fg='white',
                               command=lambda: search_attendance(tree, id_entry, start_date_entry, end_date_entry))
     search_button.grid(row=0, column=6, padx=10, pady=5)
 
+
     # Bảng hiển thị kết quả
-    columns = ("Ngày", "ID Nhân Viên", "Tên Nhân Viên",  "Thời Gian Vào", "Thời Gian Ra", "Tổng Thời Gian", "Giờ Làm Thêm")
+    columns = (
+    "Ngày", "ID Nhân Viên", "Tên Nhân Viên", "Thời Gian Vào", "Thời Gian Ra", "Tổng Thời Gian", "Giờ Làm Thêm","Trạng Thái")
     tree = ttk.Treeview(root, columns=columns, show='headings', height=15)
 
     # Cấu hình các cột cho bảng
     for col in columns:
         tree.heading(col, text=col)
-        tree.column(col, anchor="center", width=140)  # Đảm bảo các cột không bị tràn
+        tree.column(col, anchor="center", width=120)  # Đảm bảo các cột không bị tràn
     tree.pack(fill='both', expand=True, padx=20, pady=10)
 
     # Khung chứa các nút
@@ -485,7 +477,8 @@ def attendance_statistic():
 
     # Các nút bấm với màu sắc và kiểu dáng đẹp mắt
     edit_button = tk.Button(button_frame, text="Chỉnh Sửa", bg='#2196f3', fg='white',
-                            font=("Arial", 10, "bold"), command=lambda: edit_entry(tree, id_entry, start_date_entry, end_date_entry))
+                            font=("Arial", 10, "bold"),
+                            command=lambda: edit_entry(tree, id_entry, start_date_entry, end_date_entry))
     edit_button.grid(row=0, column=0, padx=10, pady=10, ipadx=15, ipady=10)
 
     delete_button = tk.Button(button_frame, text="Xóa", command=lambda: delete_entry(tree), bg='#f44336', fg='white',
@@ -507,11 +500,15 @@ def attendance_statistic():
     button_frame.grid_columnconfigure(3, weight=1)
 
     # Đặt ngày hiện tại vào date_entry
-    today = datetime.today().strftime('%Y-%m-%d')
+    # Chuyển đổi ngày theo định dạng 'yyyy-mm-dd' thành đối tượng datetime.date
+    today = datetime.today().date()
+    print(today)  # Kiểm tra giá trị của 'today'
+
+    # Đặt ngày vào DateEntry
     start_date_entry.set_date(today)
     end_date_entry.set_date(today)
 
     # Gọi hàm tìm kiếm mặc định để hiển thị dữ liệu
-    search_attendance(tree, id_entry, start_date_entry, end_date_entry)
+    # search_attendance(tree, id_entry, start_date_entry, end_date_entry)
 
     root.mainloop()

@@ -255,7 +255,7 @@ def format_name(name):
     return formatted_name
 
 # Cập nhật lại hàm TakeImages
-def TakeImages(Id, name, age, gender, cr, pb):
+def TakeImages(Id, name, age, gender, cr, pb, root):
     validation_errors = validate_data(Id, name)
     if validation_errors:
         for error in validation_errors:
@@ -310,12 +310,12 @@ def TakeImages(Id, name, age, gender, cr, pb):
 
         user_choice = ask_yes_no("Thông báo", "Bạn đã lấy đủ ảnh. Tiến hành lấy dữ liệu khuôn mặt? Chọn 'Yes' để lấy dữ liệu hoặc 'No' để lấy lại hình ảnh.")
         if user_choice == 'yes':
-            TrainImages(folder_name, f"{formatted_name}_{Id}")
+            TrainImages(folder_name, f"{formatted_name}_{Id}", root)
             # show_message("Thông báo", f"Dữ liệu khuôn mặt của bạn đã được mã hóa và lưu vào file encodings.pickle với ID: {Id}, Name: {formatted_name}")
             # msgbox.showinfo("Thông báo", f"Dữ liệu khuôn mặt của bạn đã được mã hóa và lưu vào file encodings.pickle với ID: {Id}, Name: {formatted_name}")
         else:
             print("Mở lại webcam để lấy lại hình ảnh...")
-            TakeImages(Id, name, age, gender, cr)  # Gọi lại hàm để lấy lại hình ảnh
+            TakeImages(Id, name, age, gender, cr, root)  # Gọi lại hàm để lấy lại hình ảnh
 
 # Cập nhật lại hàm extract_images_from_video
 import threading
@@ -633,7 +633,7 @@ def getProfile(id):
     return profile
 
 
-def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=30, motion_threshold=50, min_time_between_records=60):
+def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=5, motion_threshold=50, min_time_between_records=60):
     # Kết nối đến cơ sở dữ liệu SQLite
     conn = sqlite3.connect('FaceBaseNew.db')
     cursor = conn.cursor()
@@ -647,14 +647,9 @@ def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=30
     cam.set(3, 1920)
     cam.set(4, 1080)
     font = cv2.FONT_HERSHEY_SIMPLEX
+
     ts = time.time()
     date = datetime.datetime.fromtimestamp(ts).strftime('%d-%m-%Y')
-    fileName = r"Attendance\Attendance_" + date + ".csv"
-    fileName_statistic = r"AttendanceStatistic\AttendanceStatistic_" + date + ".csv"
-    col_names = ['Id', 'Name', 'Date', 'Time', 'Status']
-    col_name_statistic = ['Id', 'Name', 'Date', 'Time In', 'Time Out', 'Total time']
-    attendance = pd.DataFrame(columns=col_names)
-    attendance_statistic = pd.DataFrame(columns=col_name_statistic)
 
     frame_count = 0  # Đếm số khung hình đã xử lý
     prev_frame = None  # Khung hình trước
@@ -684,7 +679,7 @@ def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=30
         # Tính độ khác biệt giữa khung hình hiện tại và khung hình trước
         frame_diff = cv2.absdiff(prev_frame, gray_frame)
         thresh = cv2.threshold(frame_diff, motion_threshold, 255, cv2.THRESH_BINARY)[1]
-        motion_detected = cv2.countNonZero(thresh) > 10000  # Kiểm tra xem có chuyển động không
+        motion_detected = cv2.countNonZero(thresh) > 5000  # Kiểm tra xem có chuyển động không
 
         if motion_detected:
             # Phát hiện khuôn mặt trong khung hình đã thay đổi kích thước
@@ -696,13 +691,11 @@ def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=30
                 name = "Unknown"
 
                 face_distances = face_recognition.face_distance(data["encodings"], encoding)
-                best_match_index = None
                 if True in matches:
                     best_match_index = face_distances.argmin()
                     if matches[best_match_index]:
                         name = data["names"][best_match_index]
                         name = remove_accent(name)  # Chuyển thành không dấu
-                        print(f"Tên không dấu: {name}")
 
                 (top, right, bottom, left) = [int(pos / frame_resize_scale) for pos in box]
                 cv2.rectangle(im, (left, top), (right, bottom), (225, 0, 0), 2)
@@ -729,7 +722,6 @@ def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=30
                         timeStamp = datetime.datetime.fromtimestamp(ts).strftime('%H:%M:%S')
                         aa = profile[1]
                         name = remove_accent(aa)  # Chuyển thành không dấu
-                        print(f"Tên không dấu: {name}")
                         arrId = []
                         cursor.execute(
                             "SELECT PersonId FROM Attendance WHERE PersonId = ? AND Date = ? AND Status = 'In'",
@@ -741,7 +733,6 @@ def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=30
 
                         if arrId.count(Id) == 0:
                             status = 'In'
-                            attendance_statistic.loc[len(attendance_statistic)] = [Id, aa, date, timeStamp, '0', '0']
                             show_message_and_wait("Xác nhận", f"Xác nhận ghi nhận {aa} checkin lúc {timeStamp}?")
                             cursor.execute("INSERT INTO Attendance (PersonId, Date, Time, Status) VALUES (?, ?, ?, ?)",
                                            (Id, date, timeStamp, status))
@@ -753,17 +744,14 @@ def TrackImages(tolerance=0.4, frame_resize_scale=0.5, process_every_n_frames=30
                         elif arrId.count(Id) == 1:
                             status = 'Out'
                             show_message_and_wait("Xác nhận", f"Xác nhận ghi nhận {aa} checkout lúc {timeStamp}?")
-                            df = pd.read_csv(fileName_statistic)
-                            index = df.index[df['Id'] == Id].tolist()
+                            cursor.execute(
+                                "SELECT TimeIn FROM AttendanceStatistic WHERE PersonId = ? AND Date = ?", (Id, date))
+                            row = cursor.fetchone()
 
-                            if index:
-                                time_in_str = df.loc[index[0], 'Time In']
+                            if row:
+                                time_in_str = row[0]
                                 total_time = (datetime.datetime.strptime(timeStamp, '%H:%M:%S') -
                                               datetime.datetime.strptime(time_in_str, '%H:%M:%S')).total_seconds()
-
-                                df.loc[index[0], 'Time Out'] = timeStamp
-                                df.loc[index[0], 'Total time'] = total_time
-                                df.to_csv(fileName_statistic, index=False)
 
                                 cursor.execute(
                                     "INSERT INTO Attendance (PersonId, Date, Time, Status) VALUES (?, ?, ?, ?)",
